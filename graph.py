@@ -26,15 +26,17 @@ from ui_agent import push_to_ui
 
 print("ui_agent imported")
 
-from notification_agent import (
-    send_failure_notification
-)
-
-print("notification_agent imported")
-
 from re_extractor import re_extract_field
 
 print("re_extractor imported")
+
+from ui_agent import login_tool
+
+from pushing_validation_alert_tool import (
+    push_validation_alert_tool
+)
+
+print("pushing_validation_alert_tool imported")
 
 
 # =========================================================
@@ -241,6 +243,21 @@ def re_extract_node(state):
 
     for error in errors:
 
+        # =====================================================
+        # SKIP DTCD DIFFERENCE ERRORS
+        # =====================================================
+
+        if error.get(
+            "failed_field"
+        ) == "dtcd_difference":
+
+            print(
+                "\nSKIPPING DTCD "
+                "RE-EXTRACTION\n"
+            )
+
+            continue
+
         if "failed_field" not in error:
 
             continue
@@ -365,32 +382,104 @@ def notification_node(state):
     print("\n=================================================")
     print("AGENT: NOTIFICATION AGENT")
     print("TOOLS USED:")
-    print("- SMTP")
-    print("- MIME Email")
-    print("- Failure Alert System")
+    print("- Validation Alert Tool")
+    print("- REST API")
+    print("- Frontend Alert System")
     print("=================================================\n")
 
-    print(
-        "\nMAX RETRIES REACHED\n"
+    validation_result = state[
+        "validation_result"
+    ]
+
+    errors = validation_result.get(
+        "errors",
+        []
     )
+
+    # =====================================================
+    # FILTER DTCD ERRORS
+    # =====================================================
+
+    dtcd_errors = [
+
+        err for err in errors
+
+        if err.get("failed_field")
+        == "dtcd_difference"
+    ]
+
+    # =====================================================
+    # LOGIN TO FRONTEND
+    # =====================================================
+
+    token = login_tool()
+
+    # =====================================================
+    # PUSH ALERTS
+    # =====================================================
+
+    for error in dtcd_errors:
+
+        print(
+            "\nPUSHING DTCD ALERT...\n"
+        )
+
+        alert_payload = {
+
+            "entry_no":
+            error.get(
+                "Entry no",
+                "UNKNOWN"
+            ),
+
+            "account_code":
+            error.get(
+                "Account code",
+                "UNKNOWN"
+            ),
+
+            "sub_account":
+            error.get(
+                "Sub Account",
+                "UNKNOWN"
+            ),
+
+            "difference":
+            error.get(
+                "difference",
+                0
+            ),
+
+            "status":
+            "FAILED"
+        }
+
+        # =====================================================
+        # PUSH ALERT
+        # =====================================================
+
+        result = push_validation_alert_tool(
+
+            token=token,
+
+            alert_payload=alert_payload
+        )
+
+        print(
+            "\nALERT RESULT:\n"
+        )
+
+        print(result)
 
     print(
-        "\nSENDING FAILURE ALERT...\n"
+        "\nVALIDATION ALERTS "
+        "PUSHED TO UI\n"
     )
-
-    result = send_failure_notification(
-        state["validation_result"]
-    )
-
-    print(
-        "\nNOTIFICATION RESULT:\n"
-    )
-
-    print(result)
 
     return {
 
-        "processing_status": "manual_review_required"
+        "processing_status":
+        "manual_review_required"
     }
 
 
@@ -409,9 +498,9 @@ def validation_router(state):
         "status"
     )
 
-    current_retry = state.get(
-        "retry_count",
-        0
+    errors = validation_result.get(
+        "errors",
+        []
     )
 
     # =====================================================
@@ -427,8 +516,37 @@ def validation_router(state):
         return "valid"
 
     # =====================================================
-    # INVALID
+    # DTCD DIFFERENCE CHECK
     # =====================================================
+
+    dtcd_errors = [
+
+        err for err in errors
+
+        if err.get("failed_field")
+        == "dtcd_difference"
+    ]
+
+    # =====================================================
+    # SEND DIRECTLY TO UI ALERT
+    # =====================================================
+
+    if dtcd_errors:
+
+        print(
+            "\nDTCD DIFFERENCE DETECTED\n"
+        )
+
+        return "notify"
+
+    # =====================================================
+    # NORMAL RETRY FLOW
+    # =====================================================
+
+    current_retry = state.get(
+        "retry_count",
+        0
+    )
 
     print(
         f"\nINVALID DATA "
@@ -436,7 +554,7 @@ def validation_router(state):
     )
 
     # =====================================================
-    # MAX RETRIES REACHED
+    # MAX RETRIES
     # =====================================================
 
     if current_retry >= 5:
@@ -530,10 +648,6 @@ workflow.add_edge(
     "extract_data",
     "validate"
 )
-
-# =========================================================
-# RE-VALIDATE AFTER RE-EXTRACTION
-# =========================================================
 
 workflow.add_edge(
     "re_extract",

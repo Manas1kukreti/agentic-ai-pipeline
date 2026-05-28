@@ -5,6 +5,28 @@
 import httpx
 
 
+# =========================================================
+# BASE URL
+# =========================================================
+
+BASE_URL = (
+    "https://remarkable-harmony-production-2112.up.railway.app"
+)
+
+
+# =========================================================
+# ALERT API URL
+# =========================================================
+
+ALERT_API_URL = (
+    f"{BASE_URL}/api/alerts"
+)
+
+
+# =========================================================
+# PUSH VALIDATION ALERT TOOL
+# =========================================================
+
 def push_validation_alert_tool(
 
     token,
@@ -17,14 +39,6 @@ def push_validation_alert_tool(
     )
 
     try:
-
-        # =================================================
-        # ALERT API ENDPOINT
-        # =================================================
-
-        ALERT_API_URL = (
-            "https://content-nature-production-fefe.up.railway.app/api/alerts"
-        )
 
         # =================================================
         # AUTH HEADERS
@@ -55,6 +69,10 @@ def push_validation_alert_tool(
             timeout=30.0
         )
 
+        # =================================================
+        # RESPONSE LOGS
+        # =================================================
+
         print(
             "ALERT RESPONSE:",
             response.status_code
@@ -80,6 +98,10 @@ def push_validation_alert_tool(
                 f"→ {response.text}"
             )
 
+        # =================================================
+        # SUCCESS
+        # =================================================
+
         print(
             "\nVALIDATION ALERT "
             "PUSHED SUCCESSFULLY\n"
@@ -89,6 +111,10 @@ def push_validation_alert_tool(
 
             "status": "success"
         }
+
+    # =====================================================
+    # EXCEPTION HANDLING
+    # =====================================================
 
     except Exception as e:
 

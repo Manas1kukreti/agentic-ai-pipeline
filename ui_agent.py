@@ -10,7 +10,7 @@ import httpx
 # =========================================================
 
 BASE_URL = (
-    "https://content-nature-production-fefe.up.railway.app"
+    "https://remarkable-harmony-production-2112.up.railway.app"
 )
 
 LOGIN_API_URL = (

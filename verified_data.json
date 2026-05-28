@@ -1,7 +1,22 @@
 {
     "status": "valid",
     "validated_count": 14,
-    "warnings": [],
+    "warnings": [
+        {
+            "warning": "Voucher 4 not balanced",
+            "voucher_number": "4",
+            "debit_total": 2940.0,
+            "credit_total": 2948.0,
+            "dtct_difference": 8.0
+        },
+        {
+            "warning": "Voucher 5 not balanced",
+            "voucher_number": "5",
+            "debit_total": 3723.0,
+            "credit_total": 3734.0,
+            "dtct_difference": 11.0
+        }
+    ],
     "data": [
         {
             "voucher_date": "2018-01-01 00:00:00",
@@ -206,7 +221,7 @@
             "ledger_name": "Trade Receivables",
             "particulars": "Credit Sales",
             "narration": "",
-            "debit_amount": "2948.0",
+            "debit_amount": "2940.0",
             "credit_amount": "",
             "balance": "",
             "reference_number": "",
@@ -262,7 +277,7 @@
             "ledger_name": "Cash at Bank",
             "particulars": "Cash Sales",
             "narration": "",
-            "debit_amount": "3734.0",
+            "debit_amount": "3723.0",
             "credit_amount": "",
             "balance": "",
             "reference_number": "",

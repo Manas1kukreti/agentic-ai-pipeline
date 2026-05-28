@@ -106,16 +106,15 @@ def safe_float(value):
 
         value = str(value).strip()
 
-        # =============================================
+        # =================================================
         # REMOVE COMMAS
-        # =============================================
+        # =================================================
 
         value = value.replace(",", "")
 
-        # =============================================
+        # =================================================
         # HANDLE BRACKET NEGATIVE VALUES
-        # (500) → -500
-        # =============================================
+        # =================================================
 
         if value.startswith("(") and value.endswith(")"):
 
@@ -164,7 +163,7 @@ def validate_data(
         )
 
         # =================================================
-        # CONVERT STRING TO JSON
+        # STRING TO JSON
         # =================================================
 
         parsed = json.loads(
@@ -172,7 +171,7 @@ def validate_data(
         )
 
         # =================================================
-        # ENSURE JSON ARRAY
+        # ENSURE LIST
         # =================================================
 
         if not isinstance(parsed, list):
@@ -187,7 +186,7 @@ def validate_data(
             }
 
         # =================================================
-        # EMPTY RESULT CHECK
+        # EMPTY CHECK
         # =================================================
 
         if len(parsed) == 0:
@@ -247,9 +246,9 @@ def validate_data(
 
         for idx, transaction in enumerate(parsed):
 
-            # =============================================
+            # =================================================
             # PYDANTIC VALIDATION
-            # =============================================
+            # =================================================
 
             try:
 
@@ -278,22 +277,21 @@ def validate_data(
 
                 continue
 
-            # =============================================
-            # CLEAN STRING VALUES
-            # =============================================
+            # =================================================
+            # CLEAN STRINGS
+            # =================================================
 
             for key, value in cleaned_transaction.items():
 
                 if isinstance(value, str):
 
                     cleaned_transaction[key] = (
-
                         value.strip()
                     )
 
-            # =============================================
+            # =================================================
             # REQUIRED FIELD CHECK
-            # =============================================
+            # =================================================
 
             voucher_date = cleaned_transaction.get(
                 "voucher_date",
@@ -317,9 +315,9 @@ def validate_data(
                     "transaction_index": idx
                 })
 
-            # =============================================
-            # NUMERIC FIELD VALIDATION
-            # =============================================
+            # =================================================
+            # NUMERIC FIELD CHECK
+            # =================================================
 
             numeric_fields = [
 
@@ -338,10 +336,6 @@ def validate_data(
                     field,
                     ""
                 )
-
-                # =========================================
-                # SKIP EMPTY VALUES
-                # =========================================
 
                 if value in ["", None]:
 
@@ -367,9 +361,9 @@ def validate_data(
                         "transaction_index": idx
                     })
 
-            # =============================================
-            # DEBIT/CREDIT EMPTY CHECK
-            # =============================================
+            # =================================================
+            # DEBIT CREDIT EMPTY CHECK
+            # =================================================
 
             debit = cleaned_transaction.get(
                 "debit_amount",
@@ -399,9 +393,9 @@ def validate_data(
                     "transaction_index": idx
                 })
 
-            # =============================================
-            # BOTH SIDES FILLED CHECK
-            # =============================================
+            # =================================================
+            # BOTH FILLED CHECK
+            # =================================================
 
             if debit not in ["", None] and credit not in ["", None]:
 
@@ -424,14 +418,13 @@ def validate_data(
                     "transaction_index": idx
                 })
 
-            # =============================================
+            # =================================================
             # DATE FORMAT CHECK
-            # =============================================
+            # =================================================
 
             if voucher_date:
 
                 date_pattern = (
-
                     r"^[0-9:/._ -]+$"
                 )
 
@@ -461,9 +454,9 @@ def validate_data(
                         "transaction_index": idx
                     })
 
-            # =============================================
+            # =================================================
             # FUZZY VALIDATION
-            # =============================================
+            # =================================================
 
             particulars = (
 
@@ -508,9 +501,9 @@ def validate_data(
                         "transaction_index": idx
                     })
 
-            # =============================================
-            # STORE FOR VOUCHER GROUPING
-            # =============================================
+            # =================================================
+            # GROUP BY VOUCHER
+            # =================================================
 
             voucher_number = cleaned_transaction.get(
 
@@ -519,16 +512,20 @@ def validate_data(
                 ""
             )
 
-            base_voucher = str(voucher_number).split(".")[0]
+            base_voucher = str(
+                voucher_number
+            ).split(".")[0]
 
-            voucher_groups[base_voucher].append(
+            voucher_groups[
+                base_voucher
+            ].append(
 
                 cleaned_transaction
             )
 
-            # =============================================
-            # SAVE TRANSACTION
-            # =============================================
+            # =================================================
+            # SAVE VALID TRANSACTION
+            # =================================================
 
             validated_transactions.append(
 
@@ -536,10 +533,12 @@ def validate_data(
             )
 
         # =================================================
-        # VOUCHER BALANCING VALIDATION
+        # DTCD VALIDATION
         # =================================================
 
-        print("\nCHECKING VOUCHER BALANCING...\n")
+        print(
+            "\nCHECKING VOUCHER BALANCING...\n"
+        )
 
         for voucher_id, transactions in voucher_groups.items():
 
@@ -551,25 +550,40 @@ def validate_data(
 
                 total_debit += safe_float(
 
-                    tx.get("debit_amount", "")
+                    tx.get(
+                        "debit_amount",
+                        ""
+                    )
                 )
 
                 total_credit += safe_float(
 
-                    tx.get("credit_amount", "")
+                    tx.get(
+                        "credit_amount",
+                        ""
+                    )
                 )
 
-            total_debit = round(total_debit, 2)
+            total_debit = round(
+                total_debit,
+                2
+            )
 
-            total_credit = round(total_credit, 2)
+            total_credit = round(
+                total_credit,
+                2
+            )
 
-            # =============================================
-            # DTCT DIFFERENCE CALCULATION
-            # =============================================
+            # =================================================
+            # DTCD DIFFERENCE
+            # =================================================
 
             dtct_difference = round(
 
-                abs(total_debit - total_credit),
+                abs(
+                    total_debit -
+                    total_credit
+                ),
 
                 2
             )
@@ -577,25 +591,32 @@ def validate_data(
             print(
 
                 f"Voucher {voucher_id} "
+
                 f"→ Debit: {total_debit} "
+
                 f"| Credit: {total_credit} "
+
                 f"| Difference: {dtct_difference}"
             )
 
-            # =============================================
-            # BALANCE STATUS
-            # =============================================
+            # =================================================
+            # BALANCE CHECK
+            # =================================================
 
             is_balanced = (
 
                 dtct_difference <= 0.01
             )
 
-            # =============================================
-            # STORE WARNING ONLY
-            # =============================================
+            # =================================================
+            # IF NOT BALANCED
+            # =================================================
 
             if not is_balanced:
+
+                # =============================================
+                # WARNING
+                # =============================================
 
                 validation_warnings.append({
 
@@ -613,13 +634,59 @@ def validate_data(
                     "dtct_difference": dtct_difference
                 })
 
+                # =============================================
+                # GET SAMPLE ROW
+                # =============================================
+
+                sample_tx = transactions[0]
+
+                account_code = sample_tx.get(
+
+                    "account_code",
+
+                    "UNKNOWN"
+                )
+
+                sub_account = sample_tx.get(
+
+                    "ledger_name",
+
+                    "UNKNOWN"
+                )
+
+                # =============================================
+                # PUSH INTO ERRORS
+                # =============================================
+
+                validation_errors.append({
+
+                    "error": (
+                        f"Voucher {voucher_id} "
+                        "not balanced"
+                    ),
+
+                    "failed_field": (
+                        "dtcd_difference"
+                    ),
+
+                    "Entry no": voucher_id,
+
+                    "Account code": account_code,
+
+                    "Sub Account": sub_account,
+
+                    "difference": dtct_difference
+                })
+
         # =================================================
-        # VALIDATION FAILURE
+        # VALIDATION FAILED
         # =================================================
 
         if validation_errors:
 
-            print("\nVALIDATION FAILED\n")
+            print(
+                "\nVALIDATION FAILED\n"
+            )
 
             print(validation_errors)
 
@@ -646,7 +713,9 @@ def validate_data(
         # SUCCESS
         # =================================================
 
-        print("\nVALIDATION SUCCESSFUL\n")
+        print(
+            "\nVALIDATION SUCCESSFUL\n"
+        )
 
         return {
 

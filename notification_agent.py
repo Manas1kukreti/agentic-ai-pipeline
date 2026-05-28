@@ -4,6 +4,8 @@ import smtplib
 import os
 import time
 
+from dotenv import load_dotenv
+
 from email.mime.text import MIMEText
 
 from groq import Groq
@@ -12,11 +14,7 @@ from groq import Groq
 # IMPORT UI ALERT TOOL
 # =========================================================
 
-from pushing_validation_alert_tool import (
-    push_validation_alert_tool
-)
 
-from ui_agent import login_tool
 
 
 # =========================================================
@@ -196,25 +194,7 @@ def send_failure_notification(validation_result):
                         "UNKNOWN"
                     )
 
-                    # =============================================
-                    # CREATE ALERT PAYLOAD
-                    # =============================================
-
-                    alert_payload = {
-
-                        "type": "dtcd_validation",
-
-                        "Entry no": entry_no,
-
-                        "Account code": account_code,
-
-                        "Sub Account": sub_account,
-
-                        "difference": difference,
-
-                        "status": "FAILED"
-                    }
-
+                    
                     # =============================================
                     # LOGIN TO UI
                     # =============================================

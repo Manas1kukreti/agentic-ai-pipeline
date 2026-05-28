@@ -1,10 +1,22 @@
-print(" notification_agent imported")
+print("notification_agent imported")
 
 import smtplib
+import os
+import time
+
 from email.mime.text import MIMEText
 
 from groq import Groq
-import os
+
+# =========================================================
+# IMPORT UI ALERT TOOL
+# =========================================================
+
+from pushing_validation_alert_tool import (
+    push_validation_alert_tool
+)
+
+from ui_agent import login_tool
 
 
 # =========================================================
@@ -34,7 +46,9 @@ SENDER_EMAIL = "testpurpose917@gmail.com"
 # APP PASSWORD
 # =========================================================
 
-SENDER_PASSWORD = "yurwgblgotrhrbjf"
+SENDER_PASSWORD = os.getenv(
+    "EMAIL_APP_PASSWORD"
+)
 
 
 # =========================================================
@@ -44,13 +58,13 @@ SENDER_PASSWORD = "yurwgblgotrhrbjf"
 def send_failure_notification(validation_result):
 
     print(
-        "\n SENDING FAILURE NOTIFICATION...\n"
+        "\nSENDING FAILURE NOTIFICATION...\n"
     )
 
     try:
 
         # =====================================================
-        # FORMAT ERRORS FOR HUMAN READABILITY
+        # FORMAT ERRORS
         # =====================================================
 
         formatted_errors = ""
@@ -61,7 +75,7 @@ def send_failure_notification(validation_result):
         )
 
         # =====================================================
-        # NO ERRORS FOUND
+        # NO ERRORS
         # =====================================================
 
         if not errors:
@@ -76,9 +90,9 @@ def send_failure_notification(validation_result):
 
             for error in errors:
 
-                # =============================================
-                # SKIP TECHNICAL PYDANTIC ERRORS
-                # =============================================
+                # =================================================
+                # SKIP PYDANTIC ERRORS
+                # =================================================
 
                 if (
                     "Pydantic"
@@ -90,12 +104,11 @@ def send_failure_notification(validation_result):
 
                     continue
 
-                # =============================================
-                # EXTRACT DETAILS
-                # =============================================
+                # =================================================
+                # COMMON FIELDS
+                # =================================================
 
                 row_number = (
-
                     error.get(
                         "transaction_index",
                         0
@@ -112,9 +125,9 @@ def send_failure_notification(validation_result):
                     "EMPTY"
                 )
 
-                # =============================================
+                # =================================================
                 # CLEAN EMPTY VALUES
-                # =============================================
+                # =================================================
 
                 if current_value in [
                     "",
@@ -123,9 +136,9 @@ def send_failure_notification(validation_result):
 
                     current_value = "EMPTY"
 
-                # =============================================
+                # =================================================
                 # FRIENDLY ERROR MESSAGES
-                # =============================================
+                # =================================================
 
                 if failed_field == "amount":
 
@@ -157,6 +170,84 @@ def send_failure_notification(validation_result):
                         f"is invalid."
                     )
 
+                # =================================================
+                # DTCD VALIDATION FAILURE
+                # =================================================
+
+                elif failed_field == "dtcd_difference":
+
+                    entry_no = error.get(
+                        "Entry no",
+                        "UNKNOWN"
+                    )
+
+                    account_code = error.get(
+                        "Account code",
+                        "UNKNOWN"
+                    )
+
+                    sub_account = error.get(
+                        "Sub Account",
+                        "UNKNOWN"
+                    )
+
+                    difference = error.get(
+                        "difference",
+                        "UNKNOWN"
+                    )
+
+                    # =============================================
+                    # CREATE ALERT PAYLOAD
+                    # =============================================
+
+                    alert_payload = {
+
+                        "type": "dtcd_validation",
+
+                        "Entry no": entry_no,
+
+                        "Account code": account_code,
+
+                        "Sub Account": sub_account,
+
+                        "difference": difference,
+
+                        "status": "FAILED"
+                    }
+
+                    # =============================================
+                    # LOGIN TO UI
+                    # =============================================
+
+                    token = login_tool()
+
+                    # =============================================
+                    # PUSH ALERT TO UI
+                    # =============================================
+
+                    push_validation_alert_tool(
+
+                        token,
+
+                        alert_payload
+                    )
+
+                    # =============================================
+                    # HUMAN READABLE MESSAGE
+                    # =============================================
+
+                    readable_error = (
+                        f"• DTCD VALIDATION FAILED\n"
+                        f"  Entry No      : {entry_no}\n"
+                        f"  Account Code  : {account_code}\n"
+                        f"  Sub Account   : {sub_account}\n"
+                        f"  Difference    : ₹{difference}"
+                    )
+
+                # =================================================
+                # DEFAULT ERROR
+                # =================================================
+
                 else:
 
                     readable_error = (
@@ -165,12 +256,16 @@ def send_failure_notification(validation_result):
                         f"'{failed_field}' field."
                     )
 
+                # =================================================
+                # APPEND ERROR
+                # =================================================
+
                 formatted_errors += (
-                    readable_error + "\n"
+                    readable_error + "\n\n"
                 )
 
         # =====================================================
-        # CREATE LLM PROMPT
+        # LLM PROMPT
         # =====================================================
 
         prompt = f"""
@@ -226,18 +321,17 @@ BODY:
         )
 
         # =====================================================
-        # GET GENERATED RESPONSE
+        # GENERATED RESPONSE
         # =====================================================
 
         generated_text = (
-
-            response.choices[0]
-
+            response
+            .choices[0]
             .message.content
         )
 
         print(
-            "\n GENERATED EMAIL:\n"
+            "\nGENERATED EMAIL:\n"
         )
 
         print(generated_text)
@@ -247,13 +341,9 @@ BODY:
         # =====================================================
 
         subject = (
-
             generated_text
-
             .split("BODY:")[0]
-
             .replace("SUBJECT:", "")
-
             .strip()
         )
 
@@ -262,71 +352,137 @@ BODY:
         # =====================================================
 
         body = (
-
             generated_text
-
             .split("BODY:")[1]
-
             .strip()
         )
 
         # =====================================================
-        # CREATE EMAIL MESSAGE
+        # CREATE EMAIL
         # =====================================================
 
         msg = MIMEText(body)
 
         msg["Subject"] = subject
+
         msg["From"] = SENDER_EMAIL
+
         msg["To"] = MANAGER_EMAIL
 
         # =====================================================
-        # CONNECT TO SMTP
+        # EMAIL RETRY
         # =====================================================
 
-        server = smtplib.SMTP(
-            "smtp.gmail.com",
-            587
-        )
+        MAX_RETRIES = 3
 
-        server.starttls()
+        email_sent = False
+
+        last_error = None
+
+        for attempt in range(
+            1,
+            MAX_RETRIES + 1
+        ):
+
+            try:
+
+                print(
+                    f"\nEMAIL SEND ATTEMPT "
+                    f"{attempt}/{MAX_RETRIES}\n"
+                )
+
+                # =================================================
+                # SMTP CONNECTION
+                # =================================================
+
+                server = smtplib.SMTP(
+                    "smtp.gmail.com",
+                    587,
+                    timeout=30
+                )
+
+                server.starttls()
+
+                # =================================================
+                # LOGIN
+                # =================================================
+
+                server.login(
+                    SENDER_EMAIL,
+                    SENDER_PASSWORD
+                )
+
+                # =================================================
+                # SEND EMAIL
+                # =================================================
+
+                server.send_message(msg)
+
+                # =================================================
+                # CLOSE CONNECTION
+                # =================================================
+
+                server.quit()
+
+                print(
+                    "\nEMAIL SENT SUCCESSFULLY\n"
+                )
+
+                email_sent = True
+
+                break
+
+            except Exception as smtp_error:
+
+                last_error = smtp_error
+
+                print(
+                    f"\nEMAIL ATTEMPT "
+                    f"{attempt} FAILED:\n"
+                )
+
+                print(smtp_error)
+
+                # =================================================
+                # WAIT BEFORE RETRY
+                # =================================================
+
+                time.sleep(
+                    attempt * 3
+                )
 
         # =====================================================
-        # LOGIN
+        # FINAL RESPONSE
         # =====================================================
 
-        server.login(
-            SENDER_EMAIL,
-            SENDER_PASSWORD
-        )
+        if email_sent:
 
-        # =====================================================
-        # SEND EMAIL
-        # =====================================================
+            print(
+                "\nFAILURE EMAIL "
+                "SENT SUCCESSFULLY\n"
+            )
 
-        server.send_message(msg)
+            return {
 
-        # =====================================================
-        # CLOSE SERVER
-        # =====================================================
+                "status": "notification_sent",
 
-        server.quit()
+                "subject": subject,
 
-        print(
-            "\n FAILURE EMAIL "
-            "SENT SUCCESSFULLY\n"
-        )
+                "attempts_used": attempt
+            }
 
-        # =====================================================
-        # SUCCESS RESPONSE
-        # =====================================================
+        else:
 
-        return {
+            print(
+                "\nALL EMAIL ATTEMPTS FAILED\n"
+            )
 
-            "status": "notification_sent",
+            return {
 
-            "subject": subject
-        }
+                "status": "notification_failed",
+
+                "error": str(last_error)
+            }
 
     # =========================================================
     # EXCEPTION HANDLING
@@ -335,7 +491,7 @@ BODY:
     except Exception as e:
 
         print(
-            "\n NOTIFICATION ERROR:\n"
+            "\nNOTIFICATION ERROR:\n"
         )
 
         print(e)

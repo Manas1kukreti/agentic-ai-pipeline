@@ -19,6 +19,7 @@ from field_mapper_tool import field_mapper_tool
 from text_cleaner_tool import clean_dataframe_tool
 from relation_mapper_tool import relation_mapper_tool
 from financial_logic_tool import financial_logic_tool
+from pushing_validation_alert_tool import  push_validation_alert_tool
 
 
 # =========================================================
@@ -210,6 +211,22 @@ financial_rules_tool = Tool(
     )
 )
 
+# =========================================================
+# TOOL 11 → VALIDATION ALERT TOOL
+# =========================================================
+
+validation_alert_tool = Tool(
+
+    name="Validation Alert Tool",
+
+    func=push_validation_alert_tool,
+
+    description=(
+        "Pushes DTCD validation alerts "
+        "to frontend UI dashboard."
+    )
+)
+
 
 # =========================================================
 # ALL TOOLS LIST
@@ -235,5 +252,7 @@ ALL_TOOLS = [
 
     validator_tool,
 
-    ui_tool
+    ui_tool,
+    
+    validation_alert_tool
 ]

@@ -1,0 +1,12 @@
+pandas
+openpyxl
+PyPDF2
+python-dotenv
+groq
+langchain
+langchain-groq
+langgraph
+httpx
+pydantic
+jsonschema
+rapidfuzz

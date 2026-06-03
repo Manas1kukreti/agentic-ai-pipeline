@@ -81,7 +81,6 @@ Rules:
 3. If there are debit-credit balance errors, return push_with_alert.
 4. If there are JSON/extraction/normal validation errors and retry_count is below 5, return re_extract.
 5. If retry_count is 5 or more, return notify.
-
 Validation result:
 {json.dumps(validation_result, indent=2)}
 

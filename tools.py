@@ -1,13 +1,23 @@
-from langchain.tools import Tool
+try:
+
+    from langchain.tools import Tool
+
+except ImportError:
+
+    from langchain_core.tools import Tool
+
+from import_paths import ensure_project_paths
+
+ensure_project_paths()
 
 # =========================================================
 # IMPORT CORE AGENTS
 # =========================================================
 
-from data_input import get_email_text
-from llm_extractor import extract_data
-from validator import validate_data
-from ui_agent import push_to_ui
+from agents.data_input import get_email_text
+from agents.llm_extractor import extract_data
+from agents.validator import validate_data
+from agents.ui_agent import push_to_ui
 
 # =========================================================
 # IMPORT PREPROCESSING TOOLS

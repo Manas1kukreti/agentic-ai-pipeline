@@ -1,7 +1,17 @@
 import os
 import json
+from pathlib import Path
 
+from dotenv import load_dotenv
 from groq import Groq
+
+from import_paths import ensure_project_paths
+
+ensure_project_paths()
+
+load_dotenv(
+    dotenv_path=Path(__file__).resolve().parent.parent / ".env"
+)
 
 from financial_logic_tool import (
     determine_debit_credit

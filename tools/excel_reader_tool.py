@@ -1,5 +1,7 @@
 import pandas as pd
 
+from config_loader import get_excel_reader_config
+
 
 # =====================================================
 # TRANSACTION KEYWORDS
@@ -75,6 +77,18 @@ def read_excel_tool(filepath):
 
     try:
 
+        excel_config = get_excel_reader_config()
+
+        transaction_keywords = excel_config.get(
+            "transaction_keywords",
+            TRANSACTION_KEYWORDS
+        )
+
+        non_transaction_keywords = excel_config.get(
+            "non_transaction_keywords",
+            NON_TRANSACTION_KEYWORDS
+        )
+
         # =============================================
         # READ ALL SHEETS
         # =============================================
@@ -147,7 +161,7 @@ def read_excel_tool(filepath):
                 # POSITIVE SCORE
                 # =====================================
 
-                for keyword in TRANSACTION_KEYWORDS:
+                for keyword in transaction_keywords:
 
                     for col in columns:
 
@@ -159,7 +173,7 @@ def read_excel_tool(filepath):
                 # NEGATIVE SCORE
                 # =====================================
 
-                for keyword in NON_TRANSACTION_KEYWORDS:
+                for keyword in non_transaction_keywords:
 
                     for col in columns:
 

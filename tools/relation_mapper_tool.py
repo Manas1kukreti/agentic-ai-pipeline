@@ -1,5 +1,7 @@
 import pandas as pd
 
+from config_loader import get_relation_mapping_config
+
 
 # =====================================================
 # RELATION CONFIG
@@ -47,9 +49,12 @@ def relation_mapper_tool(df, filepath):
 
     try:
 
-        excel_file = pd.ExcelFile(filepath)
+        relation_config = (
+            get_relation_mapping_config()
+            or RELATION_CONFIG
+        )
 
-        for foreign_key, config in RELATION_CONFIG.items():
+        for foreign_key, config in relation_config.items():
 
             print(f"\nPROCESSING: {foreign_key}")
 
@@ -75,7 +80,24 @@ def relation_mapper_tool(df, filepath):
 
             lookup_column = config["lookup_column"]
 
-            for field in config["fields"]:
+            fields = config.get(
+                "fields",
+                []
+            )
+
+            if isinstance(fields, dict):
+
+                field_items = fields.items()
+
+            else:
+
+                field_items = [
+
+                    (field, field)
+                    for field in fields
+                ]
+
+            for field, final_field in field_items:
 
                 if field not in lookup_df.columns:
 
@@ -92,20 +114,6 @@ def relation_mapper_tool(df, filepath):
                         lookup_df[field]
                     )
                 )
-
-                # =====================================
-                # SPECIAL STANDARDIZATION
-                # =====================================
-
-                final_field = field
-
-                if field == "class":
-
-                    final_field = "account_class"
-
-                elif field == "subclass":
-
-                    final_field = "account_subclass"
 
                 df[final_field] = (
 

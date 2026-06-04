@@ -1,5 +1,7 @@
 import pandas as pd
 
+from config_loader import get_financial_logic_config
+
 
 # =====================================================
 # FINANCIAL LOGIC TOOL
@@ -196,6 +198,70 @@ RULE_PRIORITY = {
 }
 
 
+def get_business_rules():
+
+    financial_config = get_financial_logic_config()
+
+    configured_rules = financial_config.get(
+        "business_rules",
+        []
+    )
+
+    if not configured_rules:
+
+        return BUSINESS_RULES
+
+    rules = {}
+
+    for rule in configured_rules:
+
+        particulars = str(
+            rule.get("particulars", "")
+        ).lower().strip()
+
+        target = str(
+            rule.get("account_or_subaccount", "")
+        ).lower().strip()
+
+        if particulars and target:
+
+            rules[(particulars, target)] = rule.get(
+                "rule"
+            )
+
+    return rules or BUSINESS_RULES
+
+
+def get_subclass_rules():
+
+    financial_config = get_financial_logic_config()
+
+    return financial_config.get(
+        "subclass_rules",
+        SUBCLASS_RULE
+    )
+
+
+def get_keyword_rules():
+
+    financial_config = get_financial_logic_config()
+
+    return financial_config.get(
+        "keyword_rules",
+        KEYWORD_RULES
+    )
+
+
+def get_rule_priority():
+
+    financial_config = get_financial_logic_config()
+
+    return financial_config.get(
+        "rule_priority",
+        RULE_PRIORITY
+    )
+
+
 
 # =====================================================
 # CLEAN AMOUNT
@@ -255,7 +321,9 @@ def rule_from_business_logic(
     # CHECK ACCOUNT
     # =============================================
 
-    rule = BUSINESS_RULES.get(
+    business_rules = get_business_rules()
+
+    rule = business_rules.get(
 
         (particulars, account)
     )
@@ -268,7 +336,7 @@ def rule_from_business_logic(
     # CHECK SUBACCOUNT
     # =============================================
 
-    rule = BUSINESS_RULES.get(
+    rule = business_rules.get(
 
         (particulars, subaccount)
     )
@@ -289,7 +357,9 @@ def rule_from_subclass(subclass):
 
     subclass = str(subclass).lower().strip()
 
-    return SUBCLASS_RULE.get(subclass)
+    subclass_rules = get_subclass_rules()
+
+    return subclass_rules.get(subclass)
 
 
 
@@ -312,6 +382,10 @@ def rule_from_keywords(
 
     ).lower()
 
+    keyword_rules = get_keyword_rules()
+
+    rule_priority = get_rule_priority()
+
     scores = {
 
         "asset": 0,
@@ -324,7 +398,7 @@ def rule_from_keywords(
     # CALCULATE SCORES
     # =============================================
 
-    for rule_type, keywords in KEYWORD_RULES.items():
+    for rule_type, keywords in keyword_rules.items():
 
         for keyword in keywords:
 
@@ -361,7 +435,10 @@ def rule_from_keywords(
 
         candidates,
 
-        key=lambda r: RULE_PRIORITY[r]
+        key=lambda r: rule_priority.get(
+            r,
+            999
+        )
     )
 
     return best_rule

@@ -11,30 +11,34 @@ from langgraph.graph import StateGraph, END
 
 print("LangGraph imported")
 
-from data_input import get_email_text
+from import_paths import ensure_project_paths
+
+ensure_project_paths()
+
+from agents.data_input import get_email_text
 
 print("data_input imported")
 
-from llm_extractor import extract_data
+from agents.llm_extractor import extract_data
 
 print("llm_extractor imported")
 
-from validator import validate_data
+from agents.validator import validate_data
 
 print("validator imported")
 
-from ui_agent import (
+from agents.ui_agent import (
     push_to_ui,
     login_tool
 )
 
 print("ui_agent imported")
 
-from re_extractor import re_extract_field
+from agents.re_extractor import re_extract_field
 
 print("re_extractor imported")
 
-from react_agent import choose_validation_route
+from agents.react_agent import choose_validation_route
 
 print("react_agent imported")
 
@@ -44,12 +48,15 @@ from pushing_validation_alert_tool import (
 
 print("pushing_validation_alert_tool imported")
 
+from config_loader import get_agent_config
+from config_loader import get_workflow_config
+
 
 # =========================================================
 # STATE
 # =========================================================
 
-class AgentState(TypedDict):
+class AgentState(TypedDict, total=False):
 
     email_text: str
 
@@ -67,6 +74,242 @@ class AgentState(TypedDict):
 
 
 # =========================================================
+# DYNAMIC WORKFLOW HELPERS
+# =========================================================
+
+def get_max_retries():
+
+    workflow_config = get_workflow_config()
+
+    return workflow_config.get(
+        "max_retries",
+        5
+    )
+
+
+def print_agent_profile(agent_name):
+
+    agent_config = get_agent_config(
+        agent_name
+    )
+
+    role = agent_config.get(
+        "role"
+    )
+
+    performs = agent_config.get(
+        "performs",
+        []
+    )
+
+    if role:
+
+        print(f"ROLE: {role}")
+
+    if performs:
+
+        print("HOW IT PERFORMS:")
+
+        for item in performs:
+
+            print(f"- {item}")
+
+
+def ensure_json_string(data):
+
+    if isinstance(data, str):
+
+        return data
+
+    return json.dumps(
+        data,
+        indent=2,
+        default=str
+    )
+
+
+def is_structured_data(data):
+
+    if not data:
+
+        return False
+
+    try:
+
+        parsed = json.loads(data) if isinstance(
+            data,
+            str
+        ) else data
+
+    except Exception:
+
+        return False
+
+    if isinstance(parsed, dict):
+
+        parsed = parsed.get(
+            "transactions",
+            []
+        )
+
+    if not isinstance(parsed, list) or not parsed:
+
+        return False
+
+    first_row = parsed[0]
+
+    if not isinstance(first_row, dict):
+
+        return False
+
+    workflow_config = get_workflow_config()
+
+    required_fields = workflow_config.get(
+        "structured_data_required_fields",
+        []
+    )
+
+    if not required_fields:
+
+        return True
+
+    return any(
+        field in first_row
+        for field in required_fields
+    )
+
+
+def has_dtcd_errors(validation_result):
+
+    errors = validation_result.get(
+        "errors",
+        []
+    )
+
+    for err in errors:
+
+        error_text = str(
+            err.get("error", "")
+        ).lower()
+
+        if (
+            "not balanced" in error_text
+            or "difference" in error_text
+        ):
+
+            return True
+
+    return False
+
+
+def supervisor_node(state):
+
+    print("\n=================================================")
+    print("AGENT: SUPERVISOR AGENT")
+    print("TOOLS USED:")
+    print("- State Inspection")
+    print("- Dynamic Routing")
+    print("- Backtracking Rules")
+    print("=================================================\n")
+
+    print_agent_profile("supervisor")
+
+    return {
+
+        "processing_status":
+        "supervisor_checked"
+    }
+
+
+def supervisor_router(state):
+
+    processing_status = state.get(
+        "processing_status",
+        ""
+    )
+
+    retry_count = state.get(
+        "retry_count",
+        0
+    )
+
+    if processing_status in [
+
+        "re_extracted",
+        "data_extracted",
+        "extraction_skipped"
+    ]:
+
+        return "validate"
+
+    if processing_status == "re_extract_failed":
+
+        if retry_count >= get_max_retries():
+
+            return "notification"
+
+        return "extract_data"
+
+    validation_result = state.get(
+        "validation_result"
+    )
+
+    if validation_result:
+
+        status = validation_result.get(
+            "status"
+        )
+
+        if status == "valid" or has_dtcd_errors(
+            validation_result
+        ):
+
+            return "push_to_ui"
+
+        if retry_count >= get_max_retries():
+
+            return "notification"
+
+        return "re_extract"
+
+    extracted_data = state.get(
+        "extracted_data"
+    )
+
+    if is_structured_data(extracted_data):
+
+        print(
+            "\nSTRUCTURED DATA ALREADY AVAILABLE. "
+            "SKIPPING EXTRACTION.\n"
+        )
+
+        return "validate"
+
+    email_text = state.get(
+        "email_text"
+    )
+
+    if is_structured_data(email_text):
+
+        print(
+            "\nEMAIL/ATTACHMENT OUTPUT IS ALREADY "
+            "STRUCTURED JSON. SKIPPING EXTRACTION.\n"
+        )
+
+        return "validate"
+
+    if not email_text:
+
+        return "fetch_email"
+
+    if processing_status != "preprocessed":
+
+        return "preprocessing_tools"
+
+    return "extract_data"
+
+
+# =========================================================
 # NODE 1 → FETCH EMAIL
 # =========================================================
 
@@ -80,11 +323,13 @@ def fetch_email_node(state):
     print("- Attachment Reader")
     print("=================================================\n")
 
+    print_agent_profile("email")
+
     print("\nFETCHING EMAIL...\n")
 
     email_text = get_email_text()
 
-    return {
+    result = {
 
         "email_text": email_text,
 
@@ -92,6 +337,14 @@ def fetch_email_node(state):
 
         "processing_status": "email_fetched"
     }
+
+    if is_structured_data(email_text):
+
+        result["extracted_data"] = ensure_json_string(
+            email_text
+        )
+
+    return result
 
 
 # =========================================================
@@ -109,6 +362,8 @@ def preprocessing_tools_node(state):
     print("- Financial Logic Tool")
     print("- Data Cleaner Tool")
     print("=================================================\n")
+
+    print_agent_profile("input")
 
     print("\nRUNNING INPUT PREPROCESSING...\n")
 
@@ -132,6 +387,28 @@ def extract_data_node(state):
     print("- Prompt Engineering")
     print("- Structured JSON Extraction")
     print("=================================================\n")
+
+    print_agent_profile("extraction")
+
+    existing_data = state.get(
+        "extracted_data"
+    )
+
+    if is_structured_data(existing_data):
+
+        print(
+            "\nSTRUCTURED DATA FOUND. "
+            "EXTRACTION STEP SKIPPED.\n"
+        )
+
+        return {
+
+            "extracted_data":
+            ensure_json_string(existing_data),
+
+            "processing_status":
+            "extraction_skipped"
+        }
 
     print("\nRUNNING LLM EXTRACTION...\n")
 
@@ -163,13 +440,27 @@ def validate_node(state):
     print("- RapidFuzz Similarity")
     print("=================================================\n")
 
+    print_agent_profile("validation")
+
     print("\nVALIDATING DATA...\n")
+
+    extracted_data = state.get(
+        "extracted_data"
+    )
+
+    if not extracted_data and is_structured_data(
+        state.get("email_text")
+    ):
+
+        extracted_data = state.get(
+            "email_text"
+        )
 
     result = validate_data(
 
         state["email_text"],
 
-        state["extracted_data"]
+        ensure_json_string(extracted_data)
     )
 
     print("\nVALIDATION RESULT:\n")
@@ -237,6 +528,8 @@ def re_extract_node(state):
     print("- JSON Repair")
     print("- Field Correction Logic")
     print("=================================================\n")
+
+    print_agent_profile("re_extraction")
 
     print(
         "\nRE-EXTRACTING INVALID FIELDS...\n"
@@ -421,6 +714,8 @@ def push_to_ui_node(state):
     print("- Frontend Connector")
     print("=================================================\n")
 
+    print_agent_profile("ui")
+
     print(
         "\nPUSHING DATA TO FRONTEND...\n"
     )
@@ -494,6 +789,8 @@ def notification_node(state):
     print("- REST API")
     print("- Frontend Alert System")
     print("=================================================\n")
+
+    print_agent_profile("notification")
 
     validation_result = state[
         "validation_result"
@@ -754,14 +1051,15 @@ def validation_router(state):
 
         print(
             f"\nRETRY COUNT: "
-            f"{retry_count}/5\n"
+            f"{retry_count}/"
+            f"{get_max_retries()}\n"
         )
 
         # =================================================
         # MAX RETRIES REACHED
         # =================================================
 
-        if retry_count >= 5:
+        if retry_count >= get_max_retries():
 
             print(
                 "\nMAX JSON RETRIES REACHED\n"
@@ -826,10 +1124,11 @@ def validation_router(state):
 
     print(
         f"\nNORMAL RETRY COUNT: "
-        f"{retry_count}/5\n"
+        f"{retry_count}/"
+        f"{get_max_retries()}\n"
     )
 
-    if retry_count >= 5:
+    if retry_count >= get_max_retries():
 
         print(
             "\nMAX RETRIES COMPLETED\n"
@@ -858,6 +1157,11 @@ workflow = StateGraph(
 # =========================================================
 # ADD NODES
 # =========================================================
+
+workflow.add_node(
+    "supervisor",
+    supervisor_node
+)
 
 workflow.add_node(
     "fetch_email",
@@ -900,7 +1204,7 @@ workflow.add_node(
 # =========================================================
 
 workflow.set_entry_point(
-    "fetch_email"
+    "supervisor"
 )
 
 
@@ -908,24 +1212,48 @@ workflow.set_entry_point(
 # MAIN FLOW
 # =========================================================
 
+workflow.add_conditional_edges(
+
+    "supervisor",
+
+    supervisor_router,
+
+    {
+
+        "fetch_email": "fetch_email",
+
+        "preprocessing_tools": "preprocessing_tools",
+
+        "extract_data": "extract_data",
+
+        "validate": "validate",
+
+        "re_extract": "re_extract",
+
+        "push_to_ui": "push_to_ui",
+
+        "notification": "notification"
+    }
+)
+
 workflow.add_edge(
     "fetch_email",
-    "preprocessing_tools"
+    "supervisor"
 )
 
 workflow.add_edge(
     "preprocessing_tools",
-    "extract_data"
+    "supervisor"
 )
 
 workflow.add_edge(
     "extract_data",
-    "validate"
+    "supervisor"
 )
 
 workflow.add_edge(
     "re_extract",
-    "validate"
+    "supervisor"
 )
 
 
@@ -996,21 +1324,22 @@ app = workflow.compile()
 
 try:
 
-    graph_image = (
+    graph_definition = (
         app.get_graph()
-        .draw_mermaid_png()
+        .draw_mermaid()
     )
 
     with open(
-        "graph.png",
-        "wb"
+        "graph.mmd",
+        "w",
+        encoding="utf-8"
     ) as f:
 
-        f.write(graph_image)
+        f.write(graph_definition)
 
     print(
-        "\nGRAPH IMAGE SAVED "
-        "AS graph.png\n"
+        "\nGRAPH DEFINITION SAVED "
+        "AS graph.mmd\n"
     )
 
 except Exception as e:

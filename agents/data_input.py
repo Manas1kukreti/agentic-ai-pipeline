@@ -9,6 +9,10 @@ from pathlib import Path
 import PyPDF2
 import pandas as pd
 
+from import_paths import ensure_project_paths
+
+ensure_project_paths()
+
 # =====================================================
 # CUSTOM TOOLS
 # =====================================================
@@ -25,12 +29,14 @@ from relation_mapper_tool import relation_mapper_tool
 
 from financial_logic_tool import financial_logic_tool
 
+from config_loader import get_workflow_config
+
 
 # =====================================================
 # LOAD ENV VARIABLES
 # =====================================================
 
-env_path = Path(__file__).parent / ".env"
+env_path = Path(__file__).resolve().parent.parent / ".env"
 
 load_dotenv(dotenv_path=env_path)
 
@@ -45,9 +51,9 @@ EMAIL_USER = os.getenv("EMAIL_USER")
 EMAIL_PASS = os.getenv("EMAIL_PASS")
 
 
-print("EMAIL_USER:", EMAIL_USER)
+print("EMAIL_USER CONFIGURED:", bool(EMAIL_USER))
 
-print("EMAIL_PASS:", EMAIL_PASS)
+print("EMAIL_PASS CONFIGURED:", bool(EMAIL_PASS))
 
 
 # =====================================================
@@ -332,9 +338,14 @@ def extract_excel(filepath):
         # STEP 2 → LIMIT ROWS
         # =================================================
 
+        workflow_config = get_workflow_config()
+
         df = limit_rows_tool(
             df,
-            limit=14
+            limit=workflow_config.get(
+                "excel_row_limit",
+                14
+            )
         )
 
         if df is None:

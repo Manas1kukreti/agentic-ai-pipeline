@@ -1,5 +1,7 @@
 import pandas as pd
 
+from config_loader import get_field_mapping_config
+
 
 # =====================================================
 # MASTER GL SCHEMA
@@ -90,6 +92,8 @@ def field_mapper_tool(df):
 
     print("\nSTARTING FIELD MAPPING...\n")
 
+    master_schema = get_field_mapping_config() or MASTER_SCHEMA
+
     new_columns = {}
 
     for col in df.columns:
@@ -100,9 +104,9 @@ def field_mapper_tool(df):
             .lower()
         )
 
-        if clean_col in MASTER_SCHEMA:
+        if clean_col in master_schema:
 
-            new_columns[col] = MASTER_SCHEMA[clean_col]
+            new_columns[col] = master_schema[clean_col]
 
         else:
 

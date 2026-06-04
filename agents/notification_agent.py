@@ -3,12 +3,17 @@ print("notification_agent imported")
 import smtplib
 import os
 import time
+from pathlib import Path
 
 from dotenv import load_dotenv
 
 from email.mime.text import MIMEText
 
 from groq import Groq
+
+load_dotenv(
+    dotenv_path=Path(__file__).resolve().parent.parent / ".env"
+)
 
 # =========================================================
 # IMPORT UI ALERT TOOL

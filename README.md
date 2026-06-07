@@ -159,6 +159,37 @@ The architecture combines:
 
 This hybrid approach makes the pipeline more reliable and production-oriented compared to using only LLMs.
 
+Environment Variables
+
+The code now uses a single canonical naming scheme, while still accepting older aliases for backward compatibility.
+
+Canonical names:
+
+* `LEDGERFLOW_MAIL_USERNAME`
+* `LEDGERFLOW_MAIL_PASSWORD`
+* `LEDGERFLOW_IMAP_HOST`
+* `LEDGERFLOW_IMAP_PORT`
+* `LEDGERFLOW_FRONTEND_BASE_URL`
+* `LEDGERFLOW_FRONTEND_EMAIL`
+* `LEDGERFLOW_FRONTEND_PASSWORD`
+* `LEDGERFLOW_ALLOWED_API_HOSTS`
+* `LEDGERFLOW_MANAGER_EMAIL`
+* `LEDGERFLOW_SENDER_EMAIL`
+* `LEDGERFLOW_SENDER_EMAIL_APP_PASSWORD`
+* `LEDGERFLOW_SMTP_HOST`
+* `LEDGERFLOW_SMTP_PORT`
+* `LEDGERFLOW_MAX_ATTACHMENT_MB`
+
+Legacy aliases still supported:
+
+* `EMAIL_USER`
+* `EMAIL_PASS`
+* `LEDGERFLOW_AGENT_EMAIL`
+* `LEDGERFLOW_AGENT_PASSWORD`
+* `FRONTEND_API_URL`
+* `LEDGERFLOW_FRONTEND_URL`
+* `LOCAL_FILE`
+
 Agents and Tools
 
 1. Email Agent

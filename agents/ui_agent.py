@@ -7,6 +7,7 @@ import time
 
 from dotenv import load_dotenv
 
+from ledgerflow_agent.env import get_frontend_base_url, get_frontend_credentials
 from ledgerflow_agent.guardrails import require_env, validate_api_base_url
 from pathlib import Path
 
@@ -23,7 +24,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 # the host is not yet whitelisted. Resolve inside helpers instead.
 
 def _get_base_url() -> str:
-    return validate_api_base_url(require_env("LEDGERFLOW_FRONTEND_BASE_URL"))
+    return validate_api_base_url(get_frontend_base_url())
 
 def _login_url() -> str:
     return f"{_get_base_url()}/api/agent/login"
@@ -35,8 +36,8 @@ def _status_url() -> str:
     return f"{_get_base_url()}/api/uploads"
 
 
-EMAIL_ENV = "LEDGERFLOW_AGENT_EMAIL"
-PASSWORD_ENV = "LEDGERFLOW_AGENT_PASSWORD"
+EMAIL_ENV = "LEDGERFLOW_FRONTEND_EMAIL"
+PASSWORD_ENV = "LEDGERFLOW_FRONTEND_PASSWORD"
 
 
 # =========================================================
@@ -44,6 +45,51 @@ PASSWORD_ENV = "LEDGERFLOW_AGENT_PASSWORD"
 # =========================================================
 
 INTERNAL_COLUMNS = ["dr_cr_source"]
+
+
+def _voucher_key(value) -> str:
+    text = "" if value is None else str(value).strip()
+    return text.split(".", 1)[0]
+
+
+def _annotate_review_data(validated_data):
+    """Attach balance-review details to each row so the frontend can display them."""
+    payload = validated_data.copy()
+    rows = [row.copy() for row in payload.get("data", [])]
+    errors = payload.get("errors", []) or []
+    warnings = payload.get("warnings", []) or []
+
+    balance_by_voucher: dict[str, dict[str, object]] = {}
+    for error in errors:
+        difference = error.get("difference")
+        if difference is None:
+            continue
+        voucher = _voucher_key(error.get("Entry no") or error.get("entry_no") or error.get("transaction_index"))
+        if voucher not in balance_by_voucher:
+            balance_by_voucher[voucher] = {
+                "status": "review_required",
+                "difference": difference,
+                "messages": [],
+            }
+        balance_by_voucher[voucher]["messages"].append(str(error.get("error", "Validation error")))
+
+    warning_by_voucher: dict[str, list[str]] = {}
+    for warning in warnings:
+        voucher = _voucher_key(warning.get("Entry no") or warning.get("entry_no") or warning.get("transaction_index"))
+        warning_by_voucher.setdefault(voucher, []).append(str(warning.get("warning", "Warning")))
+
+    for row in rows:
+        row_voucher = _voucher_key(row.get("entry_no"))
+        review = balance_by_voucher.get(row_voucher)
+        if review:
+            row["review_status"] = review["status"]
+            row["dtcd_difference"] = review["difference"]
+            row["validation_messages"] = "; ".join(review["messages"])
+        if row_voucher in warning_by_voucher:
+            row["validation_warnings"] = "; ".join(warning_by_voucher[row_voucher])
+
+    payload["data"] = rows
+    return payload
 
 
 # =========================================================
@@ -55,7 +101,7 @@ def save_json_tool(validated_data):
     print("\nSAVING VERIFIED JSON...\n")
 
     try:
-        cleaned_data = validated_data.copy()
+        cleaned_data = _annotate_review_data(validated_data)
         cleaned_rows = []
 
         for row in cleaned_data.get("data", []):
@@ -86,7 +132,8 @@ def generate_excel_tool(validated_data):
     print("\nGENERATING GL EXCEL FILE...\n")
 
     try:
-        excel_data = validated_data.get("data", [])
+        review_ready = _annotate_review_data(validated_data)
+        excel_data = review_ready.get("data", [])
 
         if not excel_data:
             raise Exception("NO VALIDATED DATA FOUND")
@@ -118,6 +165,10 @@ def generate_excel_tool(validated_data):
             "region": "region",
             "class_name": "class",
             "account_subclass": "sub_class",
+            "review_status": "Review Status",
+            "dtcd_difference": "DTCD Difference",
+            "validation_messages": "Validation Messages",
+            "validation_warnings": "Validation Warnings",
         })
 
         preferred_columns = [
@@ -126,7 +177,8 @@ def generate_excel_tool(validated_data):
             "Balance", "Reference Number", "Party Name", "GST Number",
             "Cost Center", "Branch", "Currency", "account_code",
             "Invoice Number", "country", "region", "class", "sub_class",
-            "Repairs Applied",
+            "Review Status", "DTCD Difference", "Validation Messages",
+            "Validation Warnings", "Repairs Applied",
         ]
 
         existing_columns = [col for col in preferred_columns if col in df.columns]
@@ -150,8 +202,7 @@ def login_tool():
     print("\nLOGGING INTO FRONTEND...\n")
 
     try:
-        email = require_env(EMAIL_ENV)
-        password = require_env(PASSWORD_ENV)
+        email, password = get_frontend_credentials()
 
         login_response = httpx.post(
             _login_url(),
@@ -160,11 +211,10 @@ def login_tool():
         )
 
         print("LOGIN RESPONSE:", login_response.status_code)
-        print(login_response.text)
 
         if login_response.status_code != 200:
             raise Exception(
-                f"LOGIN FAILED → {login_response.status_code} → {login_response.text}"
+                f"LOGIN FAILED → {login_response.status_code} → response body omitted"
             )
 
         token = login_response.json()["access_token"]
@@ -202,15 +252,14 @@ def upload_tool(token):
         )
 
     print("UPLOAD RESPONSE:", response.status_code)
-    print(response.text)
 
     if response.status_code != 200:
         raise Exception(
-            f"UPLOAD FAILED → {response.status_code} → {response.text}"
+            f"UPLOAD FAILED → {response.status_code} → response body omitted"
         )
 
     response_json = response.json()
-    print("FULL UPLOAD RESPONSE JSON:", response_json)
+    print("UPLOAD RESPONSE JSON KEYS:", sorted(response_json.keys()))
 
     upload_id = response_json.get("upload_id")
     print(f"\nUPLOAD ID: {upload_id}\n")
@@ -228,7 +277,6 @@ def upload_tool(token):
         )
 
         print("POLL STATUS:", poll_response.status_code)
-        print(poll_response.text)
 
         if poll_response.status_code == 200:
             poll_data = poll_response.json()
@@ -240,7 +288,7 @@ def upload_tool(token):
                 return
 
             if status == "parse_failed":
-                raise Exception(f"PARSE FAILED → {poll_response.text}")
+                raise Exception("PARSE FAILED → response body omitted")
 
         time.sleep(5)
 

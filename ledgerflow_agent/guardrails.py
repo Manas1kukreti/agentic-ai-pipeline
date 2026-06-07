@@ -104,6 +104,14 @@ def validate_api_base_url(url: str, allowed_hosts: set[str] | None = None) -> st
             if env_host:
                 configured_hosts.add(env_host)
 
+    # Also accept the primary LedgerFlow frontend URL directly so the live
+    # dashboard does not need to be duplicated in LEDGERFLOW_ALLOWED_API_HOSTS.
+    primary_frontend_url = os.getenv("LEDGERFLOW_FRONTEND_BASE_URL", "")
+    if primary_frontend_url:
+        frontend_host = urlparse(primary_frontend_url).hostname
+        if frontend_host:
+            configured_hosts.add(frontend_host)
+
     allowed = allowed_hosts or configured_hosts or {"localhost", "127.0.0.1"}
     if parsed.hostname not in allowed:
         raise GuardrailViolation(f"Frontend API host is not allowed: {parsed.hostname}")

@@ -24,18 +24,34 @@ def parse_json_maybe(data: Any) -> Any:
     try:
         return json.loads(data)
     except Exception:
+        # Some email bodies concatenate HTML/text with an embedded JSON payload.
+        # Try to recover a JSON array/object from the surrounding text.
+        for open_char, close_char in (("[", "]"), ("{", "}")):
+            start = data.find(open_char)
+            end = data.rfind(close_char)
+            if start != -1 and end != -1 and end > start:
+                candidate = data[start : end + 1]
+                try:
+                    return json.loads(candidate)
+                except Exception:
+                    continue
         return None
 
 
-def is_structured_transaction_data(data: Any, required_fields: list[str] | None = None) -> bool:
+def coerce_transaction_payload(data: Any) -> list[dict[str, Any]] | None:
     parsed = parse_json_maybe(data)
     if isinstance(parsed, dict):
-        parsed = parsed.get("transactions") or parsed.get("data")
-    if not isinstance(parsed, list) or not parsed:
+        parsed = parsed.get("transactions") or parsed.get("data") or parsed
+    if isinstance(parsed, list) and parsed and all(isinstance(row, dict) for row in parsed):
+        return parsed
+    return None
+
+
+def is_structured_transaction_data(data: Any, required_fields: list[str] | None = None) -> bool:
+    parsed = coerce_transaction_payload(data)
+    if not parsed:
         return False
     first_row = parsed[0]
-    if not isinstance(first_row, dict):
-        return False
     if not required_fields:
         return True
     return any(field in first_row for field in required_fields)

@@ -10,7 +10,8 @@ import PyPDF2
 import pandas as pd
 
 from config_loader import get_workflow_config
-from ledgerflow_agent.guardrails import GuardrailViolation, require_env, validate_attachment_path
+from ledgerflow_agent.env import get_imap_settings, get_mail_credentials
+from ledgerflow_agent.guardrails import GuardrailViolation, validate_attachment_path
 from tools.excel_reader_tool import read_excel_tool
 from tools.limit_tool import limit_rows_tool
 from tools.field_mapper_tool import field_mapper_tool
@@ -30,19 +31,11 @@ load_dotenv(dotenv_path=env_path)
 # EMAIL CREDENTIALS
 # =====================================================
 
-EMAIL_USER = os.getenv("EMAIL_USER")
+EMAIL_USER, EMAIL_PASS = get_mail_credentials()
+IMAP_HOST, IMAP_PORT = get_imap_settings()
 
-
-EMAIL_PASS = os.getenv("EMAIL_PASS")
-
-IMAP_HOST = require_env("LEDGERFLOW_IMAP_HOST")
-
-IMAP_PORT = int(require_env("LEDGERFLOW_IMAP_PORT"))
-
-
-print("EMAIL_USER CONFIGURED:", bool(EMAIL_USER))
-
-print("EMAIL_PASS CONFIGURED:", bool(EMAIL_PASS))
+print("MAIL USER CONFIGURED:", bool(EMAIL_USER))
+print("MAIL PASS CONFIGURED:", bool(EMAIL_PASS))
 
 
 # =====================================================

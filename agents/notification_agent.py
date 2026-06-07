@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 
 from email.mime.text import MIMEText
 
+from ledgerflow_agent.env import require_env_alias
 from ledgerflow_agent.guardrails import GuardrailViolation, require_env, safe_error_message
 from ledgerflow_agent.llm import get_groq_client
 from ledgerflow_agent.prompts import get_agent_prompt
@@ -30,23 +31,9 @@ from tools.pushing_validation_alert_tool import push_validation_alert_tool
 # =========================================================
 
 MANAGER_EMAIL_ENV = "LEDGERFLOW_MANAGER_EMAIL"
-
-
-# =========================================================
-# SENDER EMAIL
-# =========================================================
-
 SENDER_EMAIL_ENV = "LEDGERFLOW_SENDER_EMAIL"
-
-
-# =========================================================
-# APP PASSWORD
-# =========================================================
-
 SENDER_PASSWORD_ENV = "LEDGERFLOW_SENDER_EMAIL_APP_PASSWORD"
-
 SMTP_HOST_ENV = "LEDGERFLOW_SMTP_HOST"
-
 SMTP_PORT_ENV = "LEDGERFLOW_SMTP_PORT"
 
 
@@ -356,17 +343,13 @@ BODY:
         # CREATE EMAIL
         # =====================================================
 
-        sender_email = os.getenv(SENDER_EMAIL_ENV) or os.getenv("EMAIL_USER")
-        if not sender_email:
-            raise GuardrailViolation(f"Missing required environment variable: {SENDER_EMAIL_ENV} and EMAIL_USER")
+        sender_email = require_env_alias("LEDGERFLOW_SENDER_EMAIL", "LEDGERFLOW_MAIL_USERNAME", "EMAIL_USER")
 
         manager_email = os.getenv(MANAGER_EMAIL_ENV) or sender_email
         if not manager_email:
             raise GuardrailViolation(f"Missing required environment variable: {MANAGER_EMAIL_ENV}")
 
-        sender_password = os.getenv(SENDER_PASSWORD_ENV) or os.getenv("EMAIL_PASS")
-        if not sender_password:
-            raise GuardrailViolation(f"Missing required environment variable: {SENDER_PASSWORD_ENV} and EMAIL_PASS")
+        sender_password = require_env_alias("LEDGERFLOW_SENDER_EMAIL_APP_PASSWORD", "LEDGERFLOW_MAIL_PASSWORD", "EMAIL_PASS")
 
         smtp_host = os.getenv(SMTP_HOST_ENV) or "smtp.gmail.com"
         smtp_port = int(os.getenv(SMTP_PORT_ENV) or "587")

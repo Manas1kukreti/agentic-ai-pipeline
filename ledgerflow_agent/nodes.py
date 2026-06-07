@@ -31,6 +31,7 @@ from ledgerflow_agent.utils import (
     is_structured_transaction_data,
     metric_duration_ms,
     normal_validation_errors,
+    coerce_transaction_payload,
     utc_now_iso,
 )
 
@@ -107,30 +108,28 @@ def input_node(state: LedgerFlowState) -> dict[str, Any]:
     # ── END BYPASS ─────────────────────────────────────────────────────────
 
     existing_email_text = state.get("email_text")
-    try:
-        if existing_email_text:
-            result = existing_email_text
-        else:
-            from agents.react_agent import create_react_agent
+    result = existing_email_text or ""
 
-            agent = create_react_agent("input")
-            prompt = (
-                f"{get_agent_prompt('input')}\n"
-                f"Memory Summary: {json.dumps(state.get('memory_summary', {}), default=str)}\n"
-                "Fetch or read the source financial data using only your allowed tools. "
-                "Return the raw source text only."
-            )
-            response = agent.invoke({"input": prompt})
-            result = _get_agent_output(response)
-            if not result or str(result).startswith("Error"):
-                # Partial ReAct state is not propagated — falling back to fetch_email tool.
-                logger.warning("ReAct input agent returned no result — falling back to fetch_email tool.")
-                result = call_tool("fetch_email", agent_name="input")
-    except Exception as exc:
+    if not result:
+        try:
+            result = call_tool("fetch_email", agent_name="input")
+        except Exception as exc:
+            return {
+                "email_text": existing_email_text or "",
+                "processing_status": "input_failed",
+                "errors": [{"error": "Input fetch failed", "details": safe_error_message(exc)}],
+                "active_agent": "input",
+                "active_agent_prompt": get_agent_prompt("input"),
+            }
+
+    structured_payload = coerce_transaction_payload(result)
+    if structured_payload:
+        update = append_tool(state, "fetch_email", {"chars": len(result or "")})
         return {
-            "email_text": existing_email_text or "",
-            "processing_status": "input_failed",
-            "errors": [{"error": "Input agent failed", "details": safe_error_message(exc)}],
+            **update,
+            "email_text": result or "",
+            "extracted_data": structured_payload,
+            "processing_status": "structured_input_ready",
             "active_agent": "input",
             "active_agent_prompt": get_agent_prompt("input"),
         }
@@ -143,10 +142,6 @@ def input_node(state: LedgerFlowState) -> dict[str, Any]:
         "active_agent": "input",
         "active_agent_prompt": get_agent_prompt("input"),
     }
-
-    if is_structured_transaction_data(result, _required_fields()):
-        output["extracted_data"] = json.loads(ensure_json_string(result)) if isinstance(result, str) else result
-        output["processing_status"] = "structured_input_ready"
 
     return output
 
@@ -161,11 +156,12 @@ def extraction_node(state: LedgerFlowState) -> dict[str, Any]:
         }
 
     email_text = state.get("email_text", "")
-    if is_structured_transaction_data(email_text, _required_fields()):
+    structured_email = coerce_transaction_payload(email_text)
+    if structured_email:
         update = append_tool(state, "extract_data", "skipped_structured_source")
         return {
             **update,
-            "extracted_data": json.loads(ensure_json_string(email_text)) if isinstance(email_text, str) else email_text,
+            "extracted_data": structured_email,
             "processing_status": "extraction_skipped",
             "active_agent": "extraction",
             "active_agent_prompt": get_agent_prompt("extraction"),
@@ -196,9 +192,10 @@ def extraction_node(state: LedgerFlowState) -> dict[str, Any]:
         }
 
     update = append_tool(state, "extract_data", {"chars": len(extracted or "")})
+    structured_extracted = coerce_transaction_payload(extracted)
     return {
         **update,
-        "extracted_data": json.loads(ensure_json_string(extracted)) if isinstance(extracted, str) else extracted,
+        "extracted_data": structured_extracted if structured_extracted is not None else json.loads(ensure_json_string(extracted)) if isinstance(extracted, str) else extracted,
         "processing_status": "data_extracted",
         "active_agent": "extraction",
         "active_agent_prompt": get_agent_prompt("extraction"),

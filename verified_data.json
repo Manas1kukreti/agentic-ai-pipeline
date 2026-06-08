@@ -3,6 +3,7 @@
     "errors": [
         {
             "error": "Voucher 4 not balanced",
+            "failed_field": "dtcd_difference",
             "Entry no": "4",
             "Account code": "210",
             "Sub Account": "Sales",
@@ -10,6 +11,7 @@
         },
         {
             "error": "Voucher 5 not balanced",
+            "failed_field": "dtcd_difference",
             "Entry no": "5",
             "Account code": "210",
             "Sub Account": "Sales",

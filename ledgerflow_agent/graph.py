@@ -5,19 +5,17 @@ from typing import Any
 from langgraph.graph import END, StateGraph
 
 from ledgerflow_agent.nodes import (
-    extraction_node,
-    finalize_node,
-    input_node,
-    notification_node,
-    repair_node,
-    route_after_input,
-    route_after_repair,
-    route_after_start,
-    route_after_ui,
-    route_after_validation,
     start_node,
-    ui_node,
+    input_node,
+    preprocessing_tools_node,
+    extraction_node,
     validation_node,
+    repair_node,
+    ui_node,
+    notification_node,
+    route_after_supervisor,
+    route_after_validate,
+    route_after_push_to_ui,
 )
 from ledgerflow_agent.state import LedgerFlowState
 
@@ -25,62 +23,56 @@ from ledgerflow_agent.state import LedgerFlowState
 def build_ledgerflow_graph():
     graph = StateGraph(LedgerFlowState)
 
-    graph.add_node("start", start_node)
-    graph.add_node("input", input_node)
-    graph.add_node("extract", extraction_node)
+    graph.add_node("supervisor", start_node)
+    graph.add_node("fetch_email", input_node)
+    graph.add_node("preprocessing_tools", preprocessing_tools_node)
+    graph.add_node("extract_data", extraction_node)
     graph.add_node("validate", validation_node)
-    graph.add_node("repair", repair_node)
-    graph.add_node("ui", ui_node)
+    graph.add_node("re_extract", repair_node)
+    graph.add_node("push_to_ui", ui_node)
     graph.add_node("notification", notification_node)
-    graph.add_node("finalize", finalize_node)
 
-    graph.set_entry_point("start")
+    graph.set_entry_point("supervisor")
 
     graph.add_conditional_edges(
-        "start",
-        route_after_start,
+        "supervisor",
+        route_after_supervisor,
         {
-            "input": "input",
+            "fetch_email": "fetch_email",
+            "preprocessing_tools": "preprocessing_tools",
+            "extract_data": "extract_data",
             "validate": "validate",
+            "re_extract": "re_extract",
+            "push_to_ui": "push_to_ui",
+            "notification": "notification",
         },
     )
-    graph.add_conditional_edges(
-        "input",
-        route_after_input,
-        {
-            "extract": "extract",
-            "validate": "validate",
-        },
-    )
-    graph.add_edge("extract", "validate")
+
+    graph.add_edge("fetch_email", "supervisor")
+    graph.add_edge("preprocessing_tools", "supervisor")
+    graph.add_edge("extract_data", "supervisor")
+    graph.add_edge("re_extract", "supervisor")
+
     graph.add_conditional_edges(
         "validate",
-        route_after_validation,
+        route_after_validate,
         {
-            "ui": "ui",
-            "repair": "repair",
+            "re_extract": "re_extract",
+            "push_to_ui": "push_to_ui",
             "notification": "notification",
         },
     )
+
     graph.add_conditional_edges(
-        "repair",
-        route_after_repair,
-        {
-            "validate": "validate",
-            "extract": "extract",
-            "notification": "notification",
-        },
-    )
-    graph.add_conditional_edges(
-        "ui",
-        route_after_ui,
+        "push_to_ui",
+        route_after_push_to_ui,
         {
             "notification": "notification",
-            "finalize": "finalize",
+            "__end__": END,
         },
     )
-    graph.add_edge("notification", "finalize")
-    graph.add_edge("finalize", END)
+
+    graph.add_edge("notification", END)
 
     return graph.compile()
 

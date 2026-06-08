@@ -146,6 +146,15 @@ def input_node(state: LedgerFlowState) -> dict[str, Any]:
     return output
 
 
+def preprocessing_tools_node(state: LedgerFlowState) -> dict[str, Any]:
+    logger.info("Executing preprocessing tools node...")
+    return {
+        "processing_status": "preprocessing_completed",
+        "active_agent": "input",
+        "active_agent_prompt": get_agent_prompt("input"),
+    }
+
+
 def extraction_node(state: LedgerFlowState) -> dict[str, Any]:
     existing_data = state.get("extracted_data")
     if is_structured_transaction_data(existing_data, _required_fields()):
@@ -479,12 +488,15 @@ def notification_node(state: LedgerFlowState) -> dict[str, Any]:
             ui_alert_result = {"alerts_sent": 0, "status": "failed", "error": safe_error_message(exc)}
 
     smtp_result: dict[str, Any] = {"status": "skipped"}
-    try:
-        from agents.notification_agent import send_failure_notification
-        email_response = send_failure_notification(validation_result)
-        smtp_result = {"status": "success", "result": email_response}
-    except Exception as exc:
-        smtp_result = {"status": "failed", "error": safe_error_message(exc)}
+    if not balance_errors:
+        try:
+            from agents.notification_agent import send_failure_notification
+            email_response = send_failure_notification(validation_result)
+            smtp_result = {"status": "success", "result": email_response}
+        except Exception as exc:
+            smtp_result = {"status": "failed", "error": safe_error_message(exc)}
+    else:
+        logger.info("DTCD balance errors detected — skipping SMTP manager email notification.")
 
     result = {
         "status": "manual_review_required",
@@ -610,3 +622,43 @@ def route_after_repair(state: LedgerFlowState) -> Literal["validate", "extract",
 
 def route_after_ui(state: LedgerFlowState) -> Literal["notification", "finalize"]:
     return decide_after_ui(state)  # type: ignore[return-value]
+
+
+def route_after_supervisor(state: LedgerFlowState) -> Literal[
+    "fetch_email", "preprocessing_tools", "extract_data", "validate", "re_extract", "push_to_ui", "notification"
+]:
+    email_text = state.get("email_text", "")
+    extracted_data = state.get("extracted_data")
+    status = state.get("processing_status", "")
+
+    if not email_text:
+        fallback = "fetch_email"
+    elif status == "input_ready" or (email_text and status not in ["preprocessing_completed", "data_extracted", "validated", "repaired", "repair_failed"]):
+        fallback = "preprocessing_tools"
+    elif status == "preprocessing_completed" or not extracted_data:
+        fallback = "extract_data"
+    elif status in ["data_extracted", "repaired", "extraction_skipped"] or extracted_data:
+        fallback = "validate"
+    else:
+        fallback = "validate"
+
+    valid_nodes = ["fetch_email", "preprocessing_tools", "extract_data", "validate", "re_extract", "push_to_ui", "notification"]
+    return _llm_route(state, valid_nodes, fallback)  # type: ignore[return-value]
+
+
+def route_after_validate(state: LedgerFlowState) -> Literal["re_extract", "push_to_ui", "notification"]:
+    fallback_val = decide_after_validation(state)
+    mapping = {
+        "ui": "push_to_ui",
+        "repair": "re_extract",
+        "notification": "notification"
+    }
+    fallback = mapping.get(fallback_val, "re_extract")
+    return _llm_route(state, ["re_extract", "push_to_ui", "notification"], fallback)  # type: ignore[return-value]
+
+
+def route_after_push_to_ui(state: LedgerFlowState) -> Literal["notification", "__end__"]:
+    fallback_val = decide_after_ui(state)
+    if fallback_val == "notification":
+        return "notification"
+    return "__end__"

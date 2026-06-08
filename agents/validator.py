@@ -506,6 +506,9 @@ def validate_data(
                     "error":
                     f"Voucher {voucher_id} not balanced",
 
+                    "failed_field":
+                    "dtcd_difference",
+
                     "Entry no":
                     voucher_id,
 

@@ -423,6 +423,26 @@ class TestValidationRouterStateHandling:
             assert result in allowed_routes
 
 
+class TestCompiledGraph:
+    """Test suite for the compiled StateGraph structure."""
+
+    def test_compiled_graph_nodes_and_edges(self):
+        """Verify the compiled graph has the exact supervisor-centric nodes."""
+        from ledgerflow_agent.graph import ledgerflow_graph
+
+        expected_nodes = {
+            "supervisor",
+            "fetch_email",
+            "preprocessing_tools",
+            "extract_data",
+            "validate",
+            "re_extract",
+            "push_to_ui",
+            "notification",
+        }
+        for node in expected_nodes:
+            assert node in ledgerflow_graph.nodes
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-

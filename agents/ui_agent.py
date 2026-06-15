@@ -4,6 +4,8 @@ import json
 import pandas as pd
 import httpx
 import time
+import os
+import psycopg2
 
 from dotenv import load_dotenv
 
@@ -116,6 +118,9 @@ def save_json_tool(validated_data):
             json.dump(cleaned_data, f, indent=4)
 
         print("VERIFIED DATA SAVED AS JSON")
+        
+        # Save to PostgreSQL
+        save_to_postgres(validated_data)
 
     except Exception as e:
         print("\nJSON SAVE FAILED\n")
@@ -296,6 +301,107 @@ def upload_tool(token):
 
 
 # =========================================================
+# POSTGRESQL INTEGRATION
+# =========================================================
+
+def save_to_postgres(validated_data):
+    """
+    Saves validated general ledger data to PostgreSQL.
+    If the connection fails or DATABASE_URL is not set, prints a warning instead of crashing.
+    """
+    database_url = os.getenv("DATABASE_URL")
+    if not database_url:
+        print("\n[WARNING] DATABASE_URL is not set in environment. Skipping database save.\n")
+        return
+
+    print(f"\n[INFO] Saving data to PostgreSQL database...")
+    
+    try:
+        # Connect to PostgreSQL
+        conn = psycopg2.connect(database_url)
+        conn.autocommit = True
+        cur = conn.cursor()
+        
+        # Create table if it doesn't exist
+        create_table_query = """
+        CREATE TABLE IF NOT EXISTS ledger_transactions (
+            id SERIAL PRIMARY KEY,
+            voucher_date VARCHAR(100),
+            entry_no VARCHAR(100),
+            sub_account VARCHAR(255),
+            details TEXT,
+            debit_amount NUMERIC(15, 2),
+            credit_amount NUMERIC(15, 2),
+            account_code VARCHAR(100),
+            country VARCHAR(100),
+            region VARCHAR(100),
+            class_name VARCHAR(100),
+            account_subclass VARCHAR(100),
+            review_status VARCHAR(100),
+            dtcd_difference NUMERIC(15, 2),
+            validation_messages TEXT,
+            validation_warnings TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """
+        cur.execute(create_table_query)
+        
+        # Annotate the data
+        annotated_payload = _annotate_review_data(validated_data)
+        rows = annotated_payload.get("data", [])
+        
+        if not rows:
+            print("[INFO] No transactions found to save in database.")
+            cur.close()
+            conn.close()
+            return
+            
+        # Helper to convert to float safely
+        from agents.validator import safe_float
+        
+        insert_query = """
+        INSERT INTO ledger_transactions (
+            voucher_date, entry_no, sub_account, details, debit_amount, credit_amount,
+            account_code, country, region, class_name, account_subclass,
+            review_status, dtcd_difference, validation_messages, validation_warnings
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+        """
+        
+        # Insert rows
+        for row in rows:
+            debit = safe_float(row.get("debit_amount"))
+            credit = safe_float(row.get("credit_amount"))
+            diff = row.get("dtcd_difference")
+            if diff is not None:
+                diff = safe_float(diff)
+                
+            cur.execute(insert_query, (
+                row.get("voucher_date", ""),
+                row.get("entry_no", ""),
+                row.get("sub_account", ""),
+                row.get("details", ""),
+                debit,
+                credit,
+                row.get("account_code", ""),
+                row.get("country", ""),
+                row.get("region", ""),
+                row.get("class_name", ""),
+                row.get("account_subclass", ""),
+                row.get("review_status", ""),
+                diff,
+                row.get("validation_messages", ""),
+                row.get("validation_warnings", "")
+            ))
+            
+        print(f"[INFO] Successfully saved {len(rows)} transactions to PostgreSQL.")
+        cur.close()
+        conn.close()
+        
+    except Exception as e:
+        print(f"\n[WARNING] Failed to save to PostgreSQL database: {e}\n")
+
+
+# =========================================================
 # MAIN UI AGENT
 # =========================================================
 
@@ -314,6 +420,10 @@ def push_to_ui(validated_data):
 
         save_json_tool(validated_data)
         generate_excel_tool(validated_data)
+        
+        # Save to PostgreSQL
+        save_to_postgres(validated_data)
+        
         token = login_tool()
         upload_tool(token)
 

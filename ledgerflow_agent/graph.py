@@ -1,5 +1,13 @@
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+# Add project root to sys.path to support direct execution
+root_path = str(Path(__file__).resolve().parent.parent)
+if root_path not in sys.path:
+    sys.path.insert(0, root_path)
+
 from typing import Any
 
 from langgraph.graph import END, StateGraph
@@ -129,3 +137,9 @@ def run_ledgerflow_agent_dynamic(
     final_state = executor_run(plan_result, state)
 
     return final_state  # type: ignore[return-value]
+
+
+if __name__ == "__main__":
+    print("\n✓ ledgerflow_graph compiled successfully!")
+    print("\nGraph Mermaid representation:")
+    print(ledgerflow_graph.get_graph().draw_mermaid())
